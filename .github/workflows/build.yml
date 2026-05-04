@@ -61,9 +61,11 @@ jobs:
       - name: Rename per-OS binaries
         run: |
           set -e
-          mv artifacts/mouse-jiggler-linux/mouse-jiggler   artifacts/mouse-jiggler-linux-x86_64
-          mv artifacts/mouse-jiggler-macos/mouse-jiggler   artifacts/mouse-jiggler-macos
-          mv artifacts/mouse-jiggler-windows/mouse-jiggler.exe artifacts/mouse-jiggler-windows.exe
+          mkdir -p out
+          mv artifacts/mouse-jiggler-linux/mouse-jiggler       out/mouse-jiggler-linux-x86_64
+          mv artifacts/mouse-jiggler-macos/mouse-jiggler       out/mouse-jiggler-macos
+          mv artifacts/mouse-jiggler-windows/mouse-jiggler.exe out/mouse-jiggler-windows.exe
+          chmod +x out/mouse-jiggler-linux-x86_64 out/mouse-jiggler-macos
 
       - name: Compute release tag
         id: tag
@@ -82,6 +84,6 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.name }}
           files: |
-            artifacts/mouse-jiggler-linux-x86_64
-            artifacts/mouse-jiggler-macos
-            artifacts/mouse-jiggler-windows.exe
+            out/mouse-jiggler-linux-x86_64
+            out/mouse-jiggler-macos
+            out/mouse-jiggler-windows.exe
