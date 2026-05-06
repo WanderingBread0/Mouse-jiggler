@@ -12,15 +12,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux
           - os: ubuntu-latest
-            artifact: mouse-jiggler-linux
-            binary: mouse-jiggler
+            os_label: linux
+            arch_label: x86_64
+            ext: ""
+          - os: ubuntu-24.04-arm
+            os_label: linux
+            arch_label: arm64
+            ext: ""
+          # macOS — macos-13 is the last x86_64 runner; macos-latest is Apple Silicon.
+          - os: macos-13
+            os_label: macos
+            arch_label: x86_64
+            ext: ""
           - os: macos-latest
-            artifact: mouse-jiggler-macos
-            binary: mouse-jiggler
+            os_label: macos
+            arch_label: arm64
+            ext: ""
+          # Windows
           - os: windows-latest
-            artifact: mouse-jiggler-windows
-            binary: mouse-jiggler.exe
+            os_label: windows
+            arch_label: x86_64
+            ext: ".exe"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -41,11 +55,19 @@ jobs:
       - name: Build single-file binary
         run: pyinstaller --onefile --name mouse-jiggler mouse_jiggler.py
 
+      - name: Stage release-named binary
+        shell: bash
+        run: |
+          set -e
+          mkdir -p staging
+          cp "dist/mouse-jiggler${{ matrix.ext }}" \
+             "staging/mouse-jiggler-${{ matrix.os_label }}-${{ matrix.arch_label }}${{ matrix.ext }}"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.binary }}
+          name: mouse-jiggler-${{ matrix.os_label }}-${{ matrix.arch_label }}
+          path: staging/*
 
   release:
     needs: build
@@ -58,20 +80,26 @@ jobs:
         with:
           path: artifacts
 
-      - name: Rename per-OS binaries
+      - name: Collect and checksum release files
         run: |
           set -e
           mkdir -p out
-          mv artifacts/mouse-jiggler-linux/mouse-jiggler       out/mouse-jiggler-linux-x86_64
-          mv artifacts/mouse-jiggler-macos/mouse-jiggler       out/mouse-jiggler-macos
-          mv artifacts/mouse-jiggler-windows/mouse-jiggler.exe out/mouse-jiggler-windows.exe
-          chmod +x out/mouse-jiggler-linux-x86_64 out/mouse-jiggler-macos
+          # Flatten matrix artifacts into out/.
+          find artifacts -type f -exec cp {} out/ \;
+          chmod +x out/mouse-jiggler-linux-* out/mouse-jiggler-macos-* 2>/dev/null || true
+          # Backwards-compatible aliases for the old asset names so existing
+          # README/scripts pointing at them keep working.
+          cp out/mouse-jiggler-macos-arm64        out/mouse-jiggler-macos
+          cp out/mouse-jiggler-windows-x86_64.exe out/mouse-jiggler-windows.exe
+          chmod +x out/mouse-jiggler-macos
+          (cd out && sha256sum * > SHA256SUMS)
+          ls -la out
 
       - name: Compute release tag
         id: tag
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "tag=${GITHUB_REF#refs/tags/}"  >> "$GITHUB_OUTPUT"
             echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=v0.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
@@ -85,5 +113,10 @@ jobs:
           name: ${{ steps.tag.outputs.name }}
           files: |
             out/mouse-jiggler-linux-x86_64
+            out/mouse-jiggler-linux-arm64
+            out/mouse-jiggler-macos-x86_64
+            out/mouse-jiggler-macos-arm64
             out/mouse-jiggler-macos
+            out/mouse-jiggler-windows-x86_64.exe
             out/mouse-jiggler-windows.exe
+            out/SHA256SUMS
